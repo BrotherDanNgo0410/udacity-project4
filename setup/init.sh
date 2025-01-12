@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e -o pipefail
 
-echo "Fetching IAM trinvc_dev_project4  ARN"
-userarn=$(aws iam get-user --user-name trinvc_dev_project4   | jq -r .User.Arn)
+echo "Fetching IAM dev_project4  ARN"
+userarn=$(aws iam get-user --user-name dev_project4   | jq -r .User.Arn)
 
 # Download tool for manipulating aws-auth
 echo "Downloading tool..."

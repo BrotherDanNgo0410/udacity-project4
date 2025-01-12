@@ -1,0 +1,10 @@
+version: "3"
+services:
+  backend_movie:
+    build:
+      context: ./backend
+    image: movie-api
+  frontend:
+    build:
+      context: ./frontend
+    image: movie-frontend

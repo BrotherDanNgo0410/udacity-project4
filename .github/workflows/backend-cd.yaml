@@ -1,0 +1,175 @@
+name: BackEnd - CD
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "starter/backend/**"
+
+env:
+  PYTHON_VERSION: 3.11
+
+jobs:
+  lint:
+    name: Backend Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./starter/backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Cache pipenv dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pipenv
+          key: pipenv-${{ runner.os }}-${{ hashFiles('**/Pipfile.lock') }}
+          restore-keys: |
+            pipenv-${{ runner.os }}-
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{env.PYTHON_VERSION}}
+
+      - name: Install pipenv
+        run: |
+          pip install pipenv
+
+      - name: Install dependencies
+        run: |
+          pipenv install
+
+      - name: Run lint
+        run: |
+          pipenv run lint
+
+  test:
+    name: Backend Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./starter/backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{env.PYTHON_VERSION}}
+
+      - name: Install pipenv
+        run: |
+          pip install pipenv
+
+      - name: Install dependencies
+        run: |
+          pipenv install
+
+      - name: Run tests
+        run: |
+          pipenv run test
+
+  build:
+    name: Build and Push Docker image to Amazon ECR
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    defaults:
+      run:
+        working-directory: ./starter/backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{env.PYTHON_VERSION}}
+
+      - name: Install pipenv
+        run: |
+          pip install pipenv
+
+      - name: Install dependencies
+        run: |
+          pipenv install
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_DEFAULT_REGION}}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+        with:
+          mask-password: "true"
+
+      - name: Build, Tag, and Push dockerimage to Amazon ECR
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: backend
+          IMAGE_TAG: latest
+          DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION}}
+        run: |
+          echo "Registry: $REGISTRY"
+          echo "Repository: $REPOSITORY"
+          echo "Image Tag: $IMAGE_TAG"
+          echo "Default region: $DEFAULT_REGION"
+          docker build -t $REGISTRY/$REPOSITORY:$IMAGE_TAG .
+          docker images
+          docker push $REGISTRY/$REPOSITORY:$IMAGE_TAG
+
+      - name: Caching DockerImage
+        uses: actions/cache@v3
+        with:
+          path: ~/docker-cache
+          key: docker-${{ github.sha }}-backend
+          restore-keys: |
+            docker-${{ github.sha }}-
+
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_DEFAULT_REGION}}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+        with:
+          mask-password: "true"
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name cluster
+
+      - name: Run init.sh
+        run: ./init.sh || true
+        working-directory: ./setup
+
+      - name: Set Docker image in Kustomize
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: backend
+          IMAGE_TAG: latest
+        run: kustomize edit set image backend=$REGISTRY/$REPOSITORY:$IMAGE_TAG
+        working-directory: ./starter/backend/k8s
+
+      - name: Apply Kubernetes resources
+        run: kustomize build | kubectl apply -f -
+        working-directory: ./starter/backend/k8s

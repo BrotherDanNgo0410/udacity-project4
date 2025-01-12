@@ -1,0 +1,13 @@
+# Create docker compose file for frontend and backend
+version: "3"
+services:
+  movie-api:
+    image: movie-api
+    ports:
+      - "5000:5000"
+  movie-frontend:
+    image: movie-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_MOVIE_API_URL: "http://localhost:5000"

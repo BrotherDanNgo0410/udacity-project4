@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/python:3.11
+FROM public.ecr.aws/docker/library/python:3.11-alpine
 ENV FLASK_RUN_HOST=0.0.0.0
 
 WORKDIR /

@@ -359,4 +359,4 @@ kustomize build | kubectl apply -f -
 <img src="./screenshots/BE_api_movies_details.png">
 5. Frontend UI
 <img src="./screenshots/FE_UI.png">
-<img src="./screenshots/FE_UI_Movie_detail.png">
+<img src="./screenshots/FE_UI_Movie_Detail.png">
